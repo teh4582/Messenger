@@ -17,7 +17,7 @@ namespace Messenger
         /// </summary>
         public static object myLock = new Object();
 
-        private int _numOfExec;
+        private int indexOfNum;
         private List<BigInteger> list;
 
         /// <summary>
@@ -25,7 +25,7 @@ namespace Messenger
         /// </summary>
         public PrimeGen()
         {
-            _numOfExec = 1;
+            indexOfNum = 0;
             list = new List<BigInteger>();
         }
 
@@ -63,10 +63,8 @@ namespace Messenger
         /// The ar multiple checks to see if teh thread should be killed to ensure high speeds.
         /// </summary>
         /// <param name="bitLen">The bit length of the BigInteger object(s) that will be generated</param>
-        /// <param name="numOfPrime">The number of prime numbers that need to be generated</param>
-        private void FindPrimeNum(int bitLen, int numOfPrime)
+        private void FindPrimeNum(int bitLen)
         {
-            _numOfExec = 1;
             CancellationTokenSource cts = new CancellationTokenSource();
             // Use ParallelOptions instance to store the CancellationToken
             ParallelOptions po = new ParallelOptions();
@@ -101,15 +99,9 @@ namespace Messenger
                                         {
                                             po.CancellationToken.ThrowIfCancellationRequested();
                                         }
-                                        else if (_numOfExec < numOfPrime)
+                                        else
                                         {
                                             list.Add(num);
-                                            _numOfExec++;
-                                        }
-                                        else if (_numOfExec == numOfPrime)
-                                        {
-                                            list.Add(num);
-                                            _numOfExec++;
                                             cts.Cancel();
                                             po.CancellationToken.ThrowIfCancellationRequested();
                                         }
@@ -136,12 +128,15 @@ namespace Messenger
         /// </summary>
         /// <param name="bitLen">The bit length of the BigInteger object(s) that will be generated</param>
         /// <param name="numOfPrime">The number of prime numbers that need to be generated, defaults to 1</param>
-        public void SetupGen(int bitLen, int numOfPrime = 1)
+        public BigInteger SetupGen(int bitLen)
         {
-            FindPrimeNum(bitLen, numOfPrime);
+            FindPrimeNum(bitLen);
+            var num = GetIntFromList(indexOfNum);
+            indexOfNum++;
+            return num;
         }
 
-        public BigInteger GetIntFromList(int i)
+        private BigInteger GetIntFromList(int i)
         {
             return list[i];
         }

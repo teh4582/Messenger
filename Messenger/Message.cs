@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers.Text;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Numerics;
@@ -17,7 +18,7 @@ namespace Messenger
         {
             Task task = Messenger.getKey("jsb@cs.rit.edu");
             task.Wait();
-            Messenger.convertKey("jsb@cs.rit.edu");
+            Messenger.encryptMessage("jsb@cs.rit.edu");
         }
     }
 
@@ -47,35 +48,56 @@ namespace Messenger
             var curDirPath = Directory.GetCurrentDirectory();
             var publicPath = curDirPath + "\\public.key";
             var privatePath = curDirPath + "\\private.key";
-            //BigInteger E = 6
+            BigInteger E = 65537;
+            
+            
         }
 
-        public static void convertKey(String email)
+        public static void encryptMessage(String email)
         {
             var curDirPath = Directory.GetCurrentDirectory();
             var emailPath = curDirPath + '\\' + email + ".key";
-            String json = File.ReadAllText(emailPath);
-            var publicKey = JsonConvert.DeserializeObject<PublicKey>(json);
-            var encoded = publicKey.key;
-            byte[] arr = Convert.FromBase64String(encoded);
-            
+            if (File.Exists(emailPath))
+            {
+                String json = File.ReadAllText(emailPath);
+                var publicKey = JsonConvert.DeserializeObject<PublicKey>(json);
+                var encoded = publicKey.key;
+                byte[] arr = Convert.FromBase64String(encoded);
+                var size = new byte[4];
+                Array.Copy(arr, size, 4);
+                size = size.Reverse().ToArray();
+                var e = BitConverter.ToInt32(size);
+                var tempArr = new byte[e];
+                Array.Copy(arr, 4, tempArr, 0, e);
+                var E = new BigInteger(tempArr);
+                Array.Copy(arr, 4 + e, size, 0, 4);
+                size = size.Reverse().ToArray();
+                var n = BitConverter.ToInt32(size);
+                tempArr = new byte[n];
+                Array.Copy(arr, 4 + e + 4, tempArr, 0, n);
+                var N = new BigInteger(tempArr);
+            }
+            else
+            {
+                
+            }
         }
         
         public static async Task getKey(string email)
         {
             string curDirPath = Directory.GetCurrentDirectory();
             string emailPath = curDirPath + '\\' + email + ".key";
-            await using var sw = File.CreateText(emailPath);
             try
             {
                 var response = await Client.GetAsync("http://kayrun.cs.rit.edu:5000/Key/" + email);
                 response.EnsureSuccessStatusCode();
                 var responseBody = await response.Content.ReadFromJsonAsync<PublicKey>();
-                await sw.WriteLineAsync(JsonConvert.SerializeObject(responseBody, Formatting.Indented));
+                await using var sw = File.CreateText(emailPath);
+                await sw.WriteLineAsync(JsonConvert.SerializeObject(responseBody));
             }
             catch
             {
-                Console.WriteLine("No Success");
+                Console.WriteLine("Email not on Server!");
             }
         }
     }
