@@ -18,7 +18,7 @@ namespace Messenger
         {
             //Task task = Messenger.getKey("jsb@cs.rit.edu");
             //task.Wait();
-            
+            Messenger.keyGen();
         }
     }
 
@@ -43,7 +43,7 @@ namespace Messenger
             return v;
         }
 
-        public void keyGen()
+        public static void keyGen()
         {
             var curDirPath = Directory.GetCurrentDirectory();
             var publicPath = curDirPath + "\\public.key";
@@ -67,10 +67,9 @@ namespace Messenger
                 Array.Reverse(e);
                 Array.Reverse(n);
             }
-            Console.WriteLine(d.Length);
         }
 
-        private byte[] genBytes(BigInteger num, bool littleEndian)
+        private static byte[] genBytes(BigInteger num, bool littleEndian)
         {
             var big = num.ToByteArray();
             
