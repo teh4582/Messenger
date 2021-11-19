@@ -52,10 +52,19 @@ namespace Messenger
         }
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
     class Messenger
     {
         private static readonly HttpClient Client = new HttpClient();
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="n"></param>
+        /// <returns></returns>
         static BigInteger modInverse(BigInteger a, BigInteger n)
         {
             BigInteger i = n, v = 0, d = 1;
@@ -74,6 +83,9 @@ namespace Messenger
             return v;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
         public static void keyGen()
         {
             var curDirPath = Directory.GetCurrentDirectory();
@@ -115,7 +127,13 @@ namespace Messenger
             using var swWriter = File.CreateText(privatePath);
             swWriter.WriteLineAsync(JsonConvert.SerializeObject(privateKey));
         }
-
+        
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="num"></param>
+        /// <param name="littleEndian"></param>
+        /// <returns></returns>
         private static byte[] genBytes(BigInteger num, bool littleEndian)
         {
             var big = num.ToByteArray();
@@ -137,7 +155,12 @@ namespace Messenger
 
             return big;
         }
-
+        
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="email"></param>
+        /// <param name="msg"></param>
         public static async Task sendMsg(String email, String msg)
         {
             var curDirPath = Directory.GetCurrentDirectory();
@@ -155,7 +178,9 @@ namespace Messenger
                 var newMsg = new Message();
                 newMsg.email = email;
                 newMsg.content = encryptMsg;
-                var content = new StringContent(newMsg.ToString(), Encoding.UTF8, "application/json");
+                var generic = JsonConvert.SerializeObject(newMsg);
+                var jsonObject = JsonConvert.DeserializeObject(generic);
+                var content = new StringContent(jsonObject.ToString(), Encoding.UTF8, "application/json");
                 try
                 {
                     var response = await Client.PutAsync("http://kayrun.cs.rit.edu:5000/Message/"
@@ -172,7 +197,11 @@ namespace Messenger
                 Console.WriteLine("You do not have that email's key! Please download it.");
             }
         }
-
+        
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="email"></param>
         public static async Task getMsg(String email)
         {
             string curDirPath = Directory.GetCurrentDirectory();
@@ -190,7 +219,7 @@ namespace Messenger
                     var msgInt = new BigInteger(msgByte);
                     var decodedInt = changeMessage(privateKey.key, msgInt);
                     var decodedByte = decodedInt.ToByteArray();
-                    var msg = BitConverter.ToString(decodedByte);
+                    var msg = Encoding.ASCII.GetString(decodedByte);
                     Console.WriteLine(msg);
                 }
                 catch
@@ -204,6 +233,10 @@ namespace Messenger
             }
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="email"></param>
         public static async Task sendKey(String email)
         {
             var curDirPath = Directory.GetCurrentDirectory();
@@ -211,10 +244,12 @@ namespace Messenger
             var privatePath = curDirPath + "\\private.key";
             if (File.Exists(publicPath))
             {
-                String jsonPublic = File.ReadAllText(publicPath);
+                var jsonPublic = File.ReadAllText(publicPath);
                 var publicKey = JsonConvert.DeserializeObject<PublicKey>(jsonPublic);
                 publicKey.email = email;
-                var content = new StringContent(publicKey.ToString(), Encoding.UTF8, "application/json");
+                var generic = JsonConvert.SerializeObject(publicKey);
+                var jsonObject = JsonConvert.DeserializeObject(generic);
+                var content = new StringContent(jsonObject.ToString(), Encoding.UTF8, "application/json");
                 var jsonPrivate = File.ReadAllText(privatePath);
                 var privateKey = JsonConvert.DeserializeObject<PrivateKey>(jsonPrivate);
                 List<String> tempList;
@@ -228,6 +263,8 @@ namespace Messenger
                 }
                 tempList.Add(email);
                 privateKey.emails = tempList.ToArray();
+                await using var sw = File.CreateText(privatePath);
+                await sw.WriteLineAsync(JsonConvert.SerializeObject(privateKey));
                 try
                 {
                     var response = await Client.PutAsync("http://kayrun.cs.rit.edu:5000/Key/"
@@ -245,6 +282,12 @@ namespace Messenger
             }
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="message"></param>
+        /// <returns></returns>
         private static BigInteger changeMessage(String key, BigInteger message)
         {
             byte[] arr = Convert.FromBase64String(key);
@@ -265,6 +308,10 @@ namespace Messenger
             return changedMsg;
         }
         
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="email"></param>
         public static async Task getKey(string email)
         {
             string curDirPath = Directory.GetCurrentDirectory();
