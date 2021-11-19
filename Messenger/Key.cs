@@ -15,4 +15,11 @@ namespace Messenger
         
         public String key { get; set; }
     }
+    
+    internal class Message
+    {
+        public String email { get; set; }
+        
+        public String content { get; set; }
+    }
 }

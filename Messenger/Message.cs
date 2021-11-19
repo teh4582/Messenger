@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Buffers.Text;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Numerics;
+using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -19,12 +22,17 @@ namespace Messenger
             //Task task = Messenger.getKey("jsb@cs.rit.edu");
             //task.Wait();
             Messenger.keyGen();
+            if (args.Length is >= 1 and < 3)
+            {
+                
+            }
         }
     }
 
     class Messenger
     {
         private static readonly HttpClient Client = new HttpClient();
+
         static BigInteger modInverse(BigInteger a, BigInteger n)
         {
             BigInteger i = n, v = 0, d = 1;
@@ -37,7 +45,7 @@ namespace Messenger
                 d = v - t * x;
                 v = x;
             }
-            
+
             v = BigInteger.ModPow(v, 1, n);
             if (v < 0) v = BigInteger.ModPow((v + n), 1, n);
             return v;
@@ -67,12 +75,28 @@ namespace Messenger
                 Array.Reverse(e);
                 Array.Reverse(n);
             }
+
+            var e_and_E = e.Concat(EBytes).ToArray();
+            var d_and_D = d.Concat(DBytes).ToArray();
+            var n_and_N = n.Concat(NBytes).ToArray();
+            var publicByte = e_and_E.Concat(n_and_N).ToArray();
+            var privateByte = d_and_D.Concat(n_and_N).ToArray();
+
+            var publicKey = new PublicKey();
+            publicKey.key = Convert.ToBase64String(publicByte);
+            var privateKey = new PrivateKey();
+            privateKey.key = Convert.ToBase64String(privateByte);
+
+            using var sw = File.CreateText(publicPath);
+            sw.WriteLineAsync(JsonConvert.SerializeObject(publicKey));
+            using var swWriter = File.CreateText(privatePath);
+            swWriter.WriteLineAsync(JsonConvert.SerializeObject(privateKey));
         }
 
         private static byte[] genBytes(BigInteger num, bool littleEndian)
         {
             var big = num.ToByteArray();
-            
+
             if (BitConverter.IsLittleEndian)
             {
                 if (!littleEndian)
@@ -87,11 +111,11 @@ namespace Messenger
                     big = big.Reverse().ToArray();
                 }
             }
-            
+
             return big;
         }
 
-        public static async Task sendMsg(String email, String Msg)
+        public static async Task sendMsg(String email, String msg)
         {
             var curDirPath = Directory.GetCurrentDirectory();
             var emailPath = curDirPath + '\\' + email + ".key";
@@ -100,15 +124,100 @@ namespace Messenger
                 String json = File.ReadAllText(emailPath);
                 var publicKey = JsonConvert.DeserializeObject<PublicKey>(json);
                 var encodedKey = publicKey.key;
-                
+                var msgByte = Encoding.ASCII.GetBytes(msg);
+                var m = new BigInteger(msgByte);
+                var encryptM = changeMessage(encodedKey, m);
+                var encryptByte = genBytes(encryptM, true);
+                var encryptMsg = Convert.ToBase64String(encryptByte);
+                var newMsg = new Message();
+                newMsg.email = email;
+                newMsg.content = encryptMsg;
+                var content = new StringContent(newMsg.ToString(), Encoding.UTF8, "application/json");
+                try
+                {
+                    var response = await Client.PutAsync("http://kayrun.cs.rit.edu:5000/Message/"
+                                                         + email, content);
+                    response.EnsureSuccessStatusCode();
+                }
+                catch
+                {
+                    Console.WriteLine("Attempt to put message on server was unsuccessful.");
+                }
             }
             else
             {
-                
+                Console.WriteLine("You do not have that email's key! Please download it.");
             }
         }
 
-        private BigInteger changeMessage(String key, BigInteger message)
+        public static async Task getMsg(String email)
+        {
+            string curDirPath = Directory.GetCurrentDirectory();
+            var privatePath = curDirPath + "\\private.key";
+            try
+            {
+                var response = await Client.GetAsync("http://kayrun.cs.rit.edu:5000/Message/" + email);
+                response.EnsureSuccessStatusCode();
+                var responseBody = await response.Content.ReadFromJsonAsync<Message>();
+                var jsonPrivate = File.ReadAllText(privatePath);
+                var privateKey = JsonConvert.DeserializeObject<PrivateKey>(jsonPrivate);
+                if (privateKey.emails.Contains(email))
+                {
+                    
+                }
+                else
+                {
+                    Console.WriteLine();
+                }
+            }
+            catch
+            {
+                Console.WriteLine("Email not on Server!");
+            }
+        }
+
+        public static async Task sendKey(String email)
+        {
+            var curDirPath = Directory.GetCurrentDirectory();
+            var publicPath = curDirPath + "\\public.key";
+            var privatePath = curDirPath + "\\private.key";
+            if (File.Exists(publicPath))
+            {
+                String jsonPublic = File.ReadAllText(publicPath);
+                var publicKey = JsonConvert.DeserializeObject<PublicKey>(jsonPublic);
+                publicKey.email = email;
+                var content = new StringContent(publicKey.ToString(), Encoding.UTF8, "application/json");
+                var jsonPrivate = File.ReadAllText(publicPath);
+                var privateKey = JsonConvert.DeserializeObject<PrivateKey>(jsonPrivate);
+                List<String> tempList;
+                if (privateKey.emails == null)
+                {
+                    tempList = new List<string>();
+                }
+                else
+                {
+                    tempList = privateKey.emails.ToList();
+                }
+                tempList.Add(email);
+                privateKey.emails = tempList.ToArray();
+                try
+                {
+                    var response = await Client.PutAsync("http://kayrun.cs.rit.edu:5000/Key/"
+                                                         + email, content);
+                    response.EnsureSuccessStatusCode();
+                }
+                catch
+                {
+                    Console.WriteLine("Attempt to put key on server was unsuccessful.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("You do not have a public key! Please generate one.");
+            }
+        }
+
+        private static BigInteger changeMessage(String key, BigInteger message)
         {
             byte[] arr = Convert.FromBase64String(key);
             var size = new byte[4];
