@@ -21,10 +21,33 @@ namespace Messenger
         {
             //Task task = Messenger.getKey("jsb@cs.rit.edu");
             //task.Wait();
-            Messenger.keyGen();
-            if (args.Length is >= 1 and < 3)
+            Task task;
+            if (args.Length is >= 1 and < 4)
             {
-                
+                switch (args[0].ToLower())
+                {
+                    case "sendmsg":
+                        task = Messenger.sendMsg(args[1], args[2]);
+                        task.Wait();
+                        break;
+                    case "sendkey":
+                        task = Messenger.sendKey(args[1]);
+                        task.Wait();
+                        break;
+                    case "keygen":
+                        Messenger.keyGen();
+                        break;
+                    case "getkey":
+                        task = Messenger.getKey(args[1]);
+                        task.Wait();
+                        break;
+                    case "getmsg":
+                        task = Messenger.getMsg(args[1]);
+                        task.Wait();
+                        break;
+                    default:
+                        break;
+                }
             }
         }
     }
@@ -154,25 +177,30 @@ namespace Messenger
         {
             string curDirPath = Directory.GetCurrentDirectory();
             var privatePath = curDirPath + "\\private.key";
-            try
+            var jsonPrivate = File.ReadAllText(privatePath);
+            var privateKey = JsonConvert.DeserializeObject<PrivateKey>(jsonPrivate);
+            if (privateKey.emails.Contains(email))
             {
-                var response = await Client.GetAsync("http://kayrun.cs.rit.edu:5000/Message/" + email);
-                response.EnsureSuccessStatusCode();
-                var responseBody = await response.Content.ReadFromJsonAsync<Message>();
-                var jsonPrivate = File.ReadAllText(privatePath);
-                var privateKey = JsonConvert.DeserializeObject<PrivateKey>(jsonPrivate);
-                if (privateKey.emails.Contains(email))
+                try
                 {
-                    
+                    var response = await Client.GetAsync("http://kayrun.cs.rit.edu:5000/Message/" + email);
+                    response.EnsureSuccessStatusCode();
+                    var responseBody = await response.Content.ReadFromJsonAsync<Message>();
+                    var msgByte = Convert.FromBase64String(responseBody.content);
+                    var msgInt = new BigInteger(msgByte);
+                    var decodedInt = changeMessage(privateKey.key, msgInt);
+                    var decodedByte = decodedInt.ToByteArray();
+                    var msg = BitConverter.ToString(decodedByte);
+                    Console.WriteLine(msg);
                 }
-                else
+                catch
                 {
-                    Console.WriteLine();
-                }
+                    Console.WriteLine("Email not on Server!");
+                }       
             }
-            catch
+            else
             {
-                Console.WriteLine("Email not on Server!");
+                Console.WriteLine("You don't have the private key for this message.");
             }
         }
 
@@ -187,7 +215,7 @@ namespace Messenger
                 var publicKey = JsonConvert.DeserializeObject<PublicKey>(jsonPublic);
                 publicKey.email = email;
                 var content = new StringContent(publicKey.ToString(), Encoding.UTF8, "application/json");
-                var jsonPrivate = File.ReadAllText(publicPath);
+                var jsonPrivate = File.ReadAllText(privatePath);
                 var privateKey = JsonConvert.DeserializeObject<PrivateKey>(jsonPrivate);
                 List<String> tempList;
                 if (privateKey.emails == null)
@@ -223,17 +251,17 @@ namespace Messenger
             var size = new byte[4];
             Array.Copy(arr, size, 4);
             size = size.Reverse().ToArray();
-            var eOrd = BitConverter.ToInt32(size);
-            var tempArr = new byte[eOrd];
-            Array.Copy(arr, 4, tempArr, 0, eOrd);
-            var EOrD = new BigInteger(tempArr);
-            Array.Copy(arr, 4 + eOrd, size, 0, 4);
+            var e_Or_d = BitConverter.ToInt32(size);
+            var tempArr = new byte[e_Or_d];
+            Array.Copy(arr, 4, tempArr, 0, e_Or_d);
+            var eOrD = new BigInteger(tempArr);
+            Array.Copy(arr, 4 + e_Or_d, size, 0, 4);
             size = size.Reverse().ToArray();
             var n = BitConverter.ToInt32(size);
             tempArr = new byte[n];
-            Array.Copy(arr, 4 + eOrd + 4, tempArr, 0, n);
+            Array.Copy(arr, 4 + e_Or_d + 4, tempArr, 0, n);
             var N = new BigInteger(tempArr);
-            var changedMsg = BigInteger.ModPow(message, EOrD, N);
+            var changedMsg = BigInteger.ModPow(message, eOrD, N);
             return changedMsg;
         }
         
