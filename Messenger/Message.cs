@@ -1,6 +1,16 @@
-﻿using System;
-using System.Buffers.Text;
-using System.Collections;
+﻿/*
+ * Author: Tristan Hoenninger
+ * Program interacts with a server sending keys, getting keys, sending messages, and getting messages.
+ * Can generates a keypair of size keysize buts and stores them locally. Can send the public key that was
+ * generated in the key generation phase and to the server, the email is also stored in the private key for alter
+ * validation. Can retrieve public key for particular user. Can take a plaintext message, encrypt it using the
+ * public key of the user you are sending it to, and ehn base64 encode it before sending it to the server.
+ * getMsg will retrieve a message for a particular user, and while its possible to download messages of any user
+ * the method can only decode messages the this user has the private key for. If user gives invalid command line
+ * arguments error messages or the help message will be printed.
+*/ 
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,52 +18,90 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Numerics;
 using System.Text;
-using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+
 
 namespace Messenger
 {
     class Program
     {
+        /// <summary>
+        /// Checks for valid arguments from the command line and if they are invalid
+        /// print help message. If arguments are valid program can generates keys,
+        /// send keys, get keys, send messages, and get messages.
+        /// </summary>
+        /// <param name="args"></param>
         static void Main(string[] args)
         {
-            //Task task = Messenger.getKey("jsb@cs.rit.edu");
-            //task.Wait();
-            Task task;
-            if (args.Length is >= 1 and < 4)
+            try
             {
-                switch (args[0].ToLower())
+                Task task;
+                if (args.Length is >= 1 and < 4)
                 {
-                    case "sendmsg":
+                    if (args[0].ToLower() == "sendmsg" && args.Length == 3)
+                    {
                         task = Messenger.sendMsg(args[1], args[2]);
                         task.Wait();
-                        break;
-                    case "sendkey":
+                    }
+                    else if (args[0].ToLower() == "sendkey" && args.Length == 2)
+                    {
                         task = Messenger.sendKey(args[1]);
                         task.Wait();
-                        break;
-                    case "keygen":
-                        Messenger.keyGen();
-                        break;
-                    case "getkey":
+                    }
+                    else if (args[0].ToLower() == "keygen" && args.Length == 2)
+                    {
+                        task = Messenger.keyGen(Int32.Parse(args[1]));
+                        task.Wait();
+                    }
+                    else if (args[0].ToLower() == "getkey" && args.Length == 2)
+                    {
                         task = Messenger.getKey(args[1]);
                         task.Wait();
-                        break;
-                    case "getmsg":
+                    }
+                    else if (args[0].ToLower() == "getmsg" && args.Length == 2)
+                    {
                         task = Messenger.getMsg(args[1]);
                         task.Wait();
-                        break;
-                    default:
-                        break;
+                    }
+                    else
+                    {
+                        helpMsg();
+                    }
                 }
             }
+            catch
+            {
+                helpMsg();
+            }
+        }
+
+        /// <summary>
+        /// Prints a help message describing the different methods that program can call and use.
+        /// </summary>
+        static void helpMsg()
+        {
+            Console.WriteLine("dotnet run <option> <other arguments>\n" +
+                "- keyGen keysize - this will generate a keypair of size keysize bits (public and private\n".PadLeft(93) 
+                + "keys) and store them locally on the disk (in files called public.key and private.key\n".PadLeft(91) +
+                "respectively), in the current directory.\n".PadLeft(47) +
+                "- sendKey email - this option sends the public key that was generated in the keyGen\n".PadLeft(88) +
+                "phase and to the server. The server will then register this email address as a\n".PadLeft(85) +
+                "valid receiver of messages. If the server already has a key for this user,\n".PadLeft(81) +
+                "it will be overwritten.\n".PadLeft(30) +
+                "- getKey email - this will retrieve public key for a particular user.\n".PadLeft(74) +
+                "- sendMsg email plaintext - this will take a plaintext message, encrypt it using the\n".PadLeft(89) +
+                "public key of the person you are sending it to, and then bse64 encode it before\n".PadLeft(86) +
+                "sending it to the server.\n".PadLeft(32) +
+                "- getMsg email - this will retrieve a message for a particular user, while it is possible\n".PadLeft(94)
+                + "to download messages for any user, you will only be able to decode messages for\n".PadLeft(86) +
+                "which you have the private key.\n".PadLeft(38));
         }
     }
 
     /// <summary>
-    /// 
+    /// Interacts with the server at http://kayrun.cs.rit.edu:5000. Gets keys, sends keys, gets messages,
+    /// and sends messages. 
     /// </summary>
     class Messenger
     {
@@ -84,20 +132,26 @@ namespace Messenger
         }
 
         /// <summary>
-        /// Generates a public key for encryption and generates a private key for
-        /// decryption and stores them in the local directory that the application can access. 
+        /// /// Generates a public key for encryption and generates a private key for
+        /// decryption of given keysize bits and stores them in the local directory that the application can access. 
         /// </summary>
-        public static void keyGen()
+        /// <param name="keysize">The number of bits the key pairs will be.</param>
+        public static  async Task keyGen(int keysize)
         {
             try
             {
+                int remainder = keysize % 16;
+                if (remainder != 0)
+                {
+                    keysize += (16 - remainder);
+                }
                 var curDirPath = Directory.GetCurrentDirectory();
                 var publicPath = curDirPath + "\\public.key";
                 var privatePath = curDirPath + "\\private.key";
                 PrimeGen prime = new PrimeGen();
                 BigInteger E = 65537;
-                BigInteger p = prime.SetupGen(512);
-                BigInteger q = prime.SetupGen(512);
+                BigInteger p = prime.SetupGen(keysize / 2);
+                BigInteger q = prime.SetupGen(keysize / 2);
                 BigInteger N = p * q;
                 BigInteger r = (p - 1) * (q - 1);
                 BigInteger D = modInverse(E, r);
@@ -124,10 +178,10 @@ namespace Messenger
                 publicKey.key = Convert.ToBase64String(publicByte);
                 var privateKey = new PrivateKey();
                 privateKey.key = Convert.ToBase64String(privateByte);
-                using var sw = File.CreateText(publicPath);
-                sw.WriteLineAsync(JsonConvert.SerializeObject(publicKey));
-                using var swWriter = File.CreateText(privatePath);
-                swWriter.WriteLineAsync(JsonConvert.SerializeObject(privateKey));
+                await using var sw = File.CreateText(publicPath);
+                await sw.WriteLineAsync(JsonConvert.SerializeObject(publicKey));
+                await using var swWriter = File.CreateText(privatePath);
+                await swWriter.WriteLineAsync(JsonConvert.SerializeObject(privateKey));
             }
             catch
             {
@@ -178,26 +232,33 @@ namespace Messenger
             var emailPath = curDirPath + '\\' + email + ".key";
             if (File.Exists(emailPath))
             {
-                String json = File.ReadAllText(emailPath);
-                var publicKey = JsonConvert.DeserializeObject<PublicKey>(json);
-                var encodedKey = publicKey.key;
-                var msgByte = Encoding.ASCII.GetBytes(msg);
-                var m = new BigInteger(msgByte);
-                var encryptM = changeMessage(encodedKey, m);
-                var encryptByte = genBytes(encryptM, true);
-                var encryptMsg = Convert.ToBase64String(encryptByte);
-                var newMsg = new Message();
-                newMsg.email = email;
-                newMsg.content = encryptMsg;
-                var generic = JsonConvert.SerializeObject(newMsg);
-                var jsonObject = JsonConvert.DeserializeObject(generic);
-                var content = new StringContent(jsonObject.ToString(), Encoding.UTF8, "application/json");
                 try
                 {
-                    var response = await Client.PutAsync("http://kayrun.cs.rit.edu:5000/Message/"
-                                                         + email, content);
-                    response.EnsureSuccessStatusCode();
-                    Console.WriteLine("Message written");
+                    String json = File.ReadAllText(emailPath);
+                    var publicKey = JsonConvert.DeserializeObject<PublicKey>(json);
+                    if (publicKey != null)
+                    {
+                        var encodedKey = publicKey.key;
+                        var msgByte = Encoding.ASCII.GetBytes(msg);
+                        var m = new BigInteger(msgByte);
+                        var encryptM = changeMessage(encodedKey, m);
+                        var encryptByte = genBytes(encryptM, true);
+                        var encryptMsg = Convert.ToBase64String(encryptByte);
+                        var newMsg = new Message();
+                        newMsg.email = email;
+                        newMsg.content = encryptMsg;
+                        var generic = JsonConvert.SerializeObject(newMsg);
+                        var jsonObject = JsonConvert.DeserializeObject(generic);
+                        var content = new StringContent(jsonObject.ToString(), Encoding.UTF8, "application/json");
+                        var response = await Client.PutAsync("http://kayrun.cs.rit.edu:5000/Message/"
+                                                             + email, content);
+                        response.EnsureSuccessStatusCode();
+                        Console.WriteLine("Message written");
+                    }
+                    else
+                    {
+                        Console.WriteLine(email+".key is empty. Please retrieve key again.");
+                    }
                 }
                 catch 
                 {
@@ -209,7 +270,7 @@ namespace Messenger
                 Console.WriteLine("You do not have that "+email+"'s key! Please download it.");
             }
         }
-        
+
         /// <summary>
         /// Gets message at a given email if user has the private key for that email.
         /// If user has the private key the message is printed otherwise a warning is printed and
@@ -222,30 +283,37 @@ namespace Messenger
             var privatePath = curDirPath + "\\private.key";
             if (File.Exists(privatePath))
             {
-                var jsonPrivate = File.ReadAllText(privatePath);
-                var privateKey = JsonConvert.DeserializeObject<PrivateKey>(jsonPrivate);
-                if (privateKey.emails.Contains(email))
+                try
                 {
-                    try
+                    var jsonPrivate = File.ReadAllText(privatePath);
+                    var privateKey = JsonConvert.DeserializeObject<PrivateKey>(jsonPrivate);
+                    if (privateKey != null)
                     {
-                        var response = await Client.GetAsync("http://kayrun.cs.rit.edu:5000/Message/" + email);
-                        response.EnsureSuccessStatusCode();
-                        var responseBody = await response.Content.ReadFromJsonAsync<Message>();
-                        var msgByte = Convert.FromBase64String(responseBody.content);
-                        var msgInt = new BigInteger(msgByte);
-                        var decodedInt = changeMessage(privateKey.key, msgInt);
-                        var decodedByte = decodedInt.ToByteArray();
-                        var msg = Encoding.ASCII.GetString(decodedByte);
-                        Console.WriteLine(msg);
+                        if (privateKey.emails.Contains(email))
+                        {
+                            var response = await Client.GetAsync("http://kayrun.cs.rit.edu:5000/Message/" + email);
+                            response.EnsureSuccessStatusCode();
+                            var responseBody = await response.Content.ReadFromJsonAsync<Message>();
+                            var msgByte = Convert.FromBase64String(responseBody.content);
+                            var msgInt = new BigInteger(msgByte);
+                            var decodedInt = changeMessage(privateKey.key, msgInt);
+                            var decodedByte = decodedInt.ToByteArray();
+                            var msg = Encoding.ASCII.GetString(decodedByte);
+                            Console.WriteLine(msg);
+                        }
+                        else
+                        {
+                            Console.WriteLine("You don't have the private key for " + email);
+                        }
                     }
-                    catch 
+                    else
                     {
-                        Console.WriteLine("Get from url was not successful!");
+                        Console.WriteLine("Private key is empty! Please generate a private key.");
                     }
                 }
-                else
+                catch
                 {
-                    Console.WriteLine("You don't have the private key for " +email);
+                    Console.WriteLine("Attempt to get message from server was not successful!");
                 }
             }
             else
@@ -253,7 +321,7 @@ namespace Messenger
                 Console.WriteLine("You don't have a private key! Please generate one.");
             }
         }
-        
+
         /// <summary>
         /// Takes the given string representing a base64 key and extracts E and N or D and N from it.
         /// If E and N are extracted from the given key the given message in the form of a BigInteger
@@ -296,33 +364,51 @@ namespace Messenger
             var privatePath = curDirPath + "\\private.key";
             if (File.Exists(publicPath) && File.Exists(privatePath))
             {
-                var jsonPublic = File.ReadAllText(publicPath);
-                var publicKey = JsonConvert.DeserializeObject<PublicKey>(jsonPublic);
-                publicKey.email = email;
-                var generic = JsonConvert.SerializeObject(publicKey);
-                var jsonObject = JsonConvert.DeserializeObject(generic);
-                var content = new StringContent(jsonObject.ToString(), Encoding.UTF8, "application/json");
-                var jsonPrivate = File.ReadAllText(privatePath);
-                var privateKey = JsonConvert.DeserializeObject<PrivateKey>(jsonPrivate);
-                List<String> tempList;
-                if (privateKey.emails == null)
-                {
-                    tempList = new List<string>();
-                }
-                else
-                {
-                    tempList = privateKey.emails.ToList();
-                }
-                tempList.Add(email);
-                privateKey.emails = tempList.ToArray();
-                await using var sw = File.CreateText(privatePath);
-                await sw.WriteLineAsync(JsonConvert.SerializeObject(privateKey));
                 try
                 {
-                    var response = await Client.PutAsync("http://kayrun.cs.rit.edu:5000/Key/"
-                                                         + email, content);
-                    response.EnsureSuccessStatusCode();
-                    Console.WriteLine("Key saved");
+                    var jsonPublic = File.ReadAllText(publicPath);
+                    var publicKey = JsonConvert.DeserializeObject<PublicKey>(jsonPublic);
+                    if (publicKey != null)
+                    {
+                        publicKey.email = email;
+                        var generic = JsonConvert.SerializeObject(publicKey);
+                        var jsonObject = JsonConvert.DeserializeObject(generic);
+                        var content = new StringContent(jsonObject.ToString(), Encoding.UTF8, "application/json");
+                        var jsonPrivate = File.ReadAllText(privatePath);
+                        var privateKey = JsonConvert.DeserializeObject<PrivateKey>(jsonPrivate);
+                        if (privateKey != null)
+                        {
+                            List<String> tempList;
+                            if (privateKey.emails == null)
+                            {
+                                tempList = new List<string>();
+                            }
+                            else
+                            {
+                                tempList = privateKey.emails.ToList();
+                            }
+
+                            if (!tempList.Contains(email)) {
+                                tempList.Add(email);
+                            }
+                            privateKey.emails = tempList.ToArray();
+                            await using var sw = File.CreateText(privatePath);
+                            await sw.WriteLineAsync(JsonConvert.SerializeObject(privateKey));
+
+                            var response = await Client.PutAsync("http://kayrun.cs.rit.edu:5000/Key/"
+                                                                 + email, content);
+                            response.EnsureSuccessStatusCode();
+                            Console.WriteLine("Key saved");
+                        }
+                        else
+                        {
+                            Console.WriteLine("Your private key is empty! Please generate a new private key.");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("Your public key is empty! Please generate a new public key.");
+                    }
                 }
                 catch 
                 {
@@ -359,7 +445,7 @@ namespace Messenger
             }
             catch 
             {
-                Console.WriteLine("Email not on Server!");
+                Console.WriteLine("Attempt to retrieve key from "+email+" was unsuccessful!");
             }
         }
     }
