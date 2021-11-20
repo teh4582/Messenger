@@ -31,7 +31,7 @@ namespace Messenger
         /// print help message. If arguments are valid program can generates keys,
         /// send keys, get keys, send messages, and get messages.
         /// </summary>
-        /// <param name="args"></param>
+        /// <param name="args">Command line arguments</param>
         static void Main(string[] args)
         {
             try
