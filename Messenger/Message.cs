@@ -149,18 +149,18 @@ namespace Messenger
                 var publicPath = curDirPath + "\\public.key";
                 var privatePath = curDirPath + "\\private.key";
                 PrimeGen prime = new PrimeGen();
-                BigInteger E = 65537;
+                BigInteger bigE = 65537;
                 BigInteger p = prime.SetupGen(keysize / 2);
                 BigInteger q = prime.SetupGen(keysize / 2);
-                BigInteger N = p * q;
+                BigInteger bigN = p * q;
                 BigInteger r = (p - 1) * (q - 1);
-                BigInteger D = modInverse(E, r);
-                var DBytes = genBytes(D, true);
-                var EBytes = genBytes(E, true);
-                var NBytes = genBytes(N, true);
-                var d = BitConverter.GetBytes(DBytes.Length);
-                var e = BitConverter.GetBytes(EBytes.Length);
-                var n = BitConverter.GetBytes(NBytes.Length);
+                BigInteger bigD = modInverse(bigE, r);
+                var dBytes = genBytes(bigD, true);
+                var eBytes = genBytes(bigE, true);
+                var nBytes = genBytes(bigN, true);
+                var d = BitConverter.GetBytes(dBytes.Length);
+                var e = BitConverter.GetBytes(eBytes.Length);
+                var n = BitConverter.GetBytes(nBytes.Length);
                 if (BitConverter.IsLittleEndian)
                 {
                     Array.Reverse(d);
@@ -168,11 +168,11 @@ namespace Messenger
                     Array.Reverse(n);
                 }
 
-                var e_and_E = e.Concat(EBytes).ToArray();
-                var d_and_D = d.Concat(DBytes).ToArray();
-                var n_and_N = n.Concat(NBytes).ToArray();
-                var publicByte = e_and_E.Concat(n_and_N).ToArray();
-                var privateByte = d_and_D.Concat(n_and_N).ToArray();
+                var eAndE = e.Concat(eBytes).ToArray();
+                var dAndD = d.Concat(dBytes).ToArray();
+                var nAndN = n.Concat(nBytes).ToArray();
+                var publicByte = eAndE.Concat(nAndN).ToArray();
+                var privateByte = dAndD.Concat(nAndN).ToArray();
 
                 var publicKey = new PublicKey();
                 publicKey.key = Convert.ToBase64String(publicByte);
