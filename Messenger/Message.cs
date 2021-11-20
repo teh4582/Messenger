@@ -100,8 +100,8 @@ namespace Messenger
     }
 
     /// <summary>
-    /// Interacts with the server at http://kayrun.cs.rit.edu:5000. Gets keys, sends keys, gets messages,
-    /// and sends messages. 
+    /// Interacts with the server at http://kayrun.cs.rit.edu:5000. Generates keys, gets keys, sends keys,
+    /// gets messages, and sends messages. 
     /// </summary>
     class Messenger
     {
