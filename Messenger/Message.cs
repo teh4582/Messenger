@@ -140,53 +140,60 @@ namespace Messenger
         {
             try
             {
-                int remainder = keysize % 16;
-                if (remainder != 0)
+                if (keysize > 0)
                 {
-                    keysize += (16 - remainder);
+                    int remainder = keysize % 16;
+                    if (remainder != 0)
+                    {
+                        keysize += (16 - remainder);
+                    }
+
+                    var curDirPath = Directory.GetCurrentDirectory();
+                    var publicPath = curDirPath + "\\public.key";
+                    var privatePath = curDirPath + "\\private.key";
+                    PrimeGen prime = new PrimeGen();
+                    BigInteger bigE = 65537;
+                    BigInteger p = prime.SetupGen(keysize / 2);
+                    BigInteger q = prime.SetupGen(keysize / 2);
+                    BigInteger bigN = p * q;
+                    BigInteger r = (p - 1) * (q - 1);
+                    BigInteger bigD = modInverse(bigE, r);
+                    var dBytes = genBytes(bigD, true);
+                    var eBytes = genBytes(bigE, true);
+                    var nBytes = genBytes(bigN, true);
+                    var d = BitConverter.GetBytes(dBytes.Length);
+                    var e = BitConverter.GetBytes(eBytes.Length);
+                    var n = BitConverter.GetBytes(nBytes.Length);
+                    if (BitConverter.IsLittleEndian)
+                    {
+                        Array.Reverse(d);
+                        Array.Reverse(e);
+                        Array.Reverse(n);
+                    }
+
+                    var eAndE = e.Concat(eBytes).ToArray();
+                    var dAndD = d.Concat(dBytes).ToArray();
+                    var nAndN = n.Concat(nBytes).ToArray();
+                    var publicByte = eAndE.Concat(nAndN).ToArray();
+                    var privateByte = dAndD.Concat(nAndN).ToArray();
+
+                    var publicKey = new PublicKey();
+                    publicKey.key = Convert.ToBase64String(publicByte);
+                    var privateKey = new PrivateKey();
+                    privateKey.key = Convert.ToBase64String(privateByte);
+                    await using var sw = File.CreateText(publicPath);
+                    await sw.WriteLineAsync(JsonConvert.SerializeObject(publicKey));
+                    await using var swWriter = File.CreateText(privatePath);
+                    await swWriter.WriteLineAsync(JsonConvert.SerializeObject(privateKey));
                 }
-                var curDirPath = Directory.GetCurrentDirectory();
-                var publicPath = curDirPath + "\\public.key";
-                var privatePath = curDirPath + "\\private.key";
-                PrimeGen prime = new PrimeGen();
-                BigInteger bigE = 65537;
-                BigInteger p = prime.SetupGen(keysize / 2);
-                BigInteger q = prime.SetupGen(keysize / 2);
-                BigInteger bigN = p * q;
-                BigInteger r = (p - 1) * (q - 1);
-                BigInteger bigD = modInverse(bigE, r);
-                var dBytes = genBytes(bigD, true);
-                var eBytes = genBytes(bigE, true);
-                var nBytes = genBytes(bigN, true);
-                var d = BitConverter.GetBytes(dBytes.Length);
-                var e = BitConverter.GetBytes(eBytes.Length);
-                var n = BitConverter.GetBytes(nBytes.Length);
-                if (BitConverter.IsLittleEndian)
+                else
                 {
-                    Array.Reverse(d);
-                    Array.Reverse(e);
-                    Array.Reverse(n);
+                    Console.WriteLine("Keysize must be a positive integer to generate keys.");
                 }
-
-                var eAndE = e.Concat(eBytes).ToArray();
-                var dAndD = d.Concat(dBytes).ToArray();
-                var nAndN = n.Concat(nBytes).ToArray();
-                var publicByte = eAndE.Concat(nAndN).ToArray();
-                var privateByte = dAndD.Concat(nAndN).ToArray();
-
-                var publicKey = new PublicKey();
-                publicKey.key = Convert.ToBase64String(publicByte);
-                var privateKey = new PrivateKey();
-                privateKey.key = Convert.ToBase64String(privateByte);
-                await using var sw = File.CreateText(publicPath);
-                await sw.WriteLineAsync(JsonConvert.SerializeObject(publicKey));
-                await using var swWriter = File.CreateText(privatePath);
-                await swWriter.WriteLineAsync(JsonConvert.SerializeObject(privateKey));
             }
             catch
             {
                 Console.WriteLine("Attempt to write in current directory was unsuccessful!");
-                Console.WriteLine("Generate key in different directory.");
             }
         }
         
